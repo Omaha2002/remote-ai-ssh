@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ========== UI helpers ==========
-GREEN="\033[1;32m"; RED="\033[1;31m"; YELLOW="\033[1;33m"; CYAN="\033[1;36m"; RESET="\033[0m"
-info(){ echo -e "${CYAN}→${RESET} $*"; }
-ok(){   echo -e "${GREEN}✔${RESET} $*"; }
-warn(){ echo -e "${YELLOW}!${RESET} $*"; }
-die(){  echo -e "${RED}✖${RESET} $*" >&2; exit 1; }
+# ========== UI helpers (ANSI-kleuren) ==========
+GREEN=$'\033[1;32m'; RED=$'\033[1;31m'; YELLOW=$'\033[1;33m'; CYAN=$'\033[1;36m'; RESET=$'\033[0m'
+info(){ printf '%b→%b %s\n' "$CYAN" "$RESET" "$*"; }
+ok(){   printf '%b✔%b %s\n' "$GREEN" "$RESET" "$*"; }
+warn(){ printf '%b!%b %s\n' "$YELLOW" "$RESET" "$*"; }
+die(){  printf '%b✖%b %s\n' "$RED" "$RESET" "$*" >&2; exit 1; }
 
-# ========== Vars ==========
+# ========== Vars & dirs ==========
 HOME_DIR="$HOME"
 LOCAL_BIN="$HOME_DIR/.local/bin"
 CONFIG_DIR="$HOME_DIR/.config"
@@ -20,7 +20,7 @@ ERRLOG="/tmp/fish_last_stderr.log"
 
 mkdir -p "$LOCAL_BIN" "$FISH_CONFD" "$ZELLIJ_DIR" "$AICHAT_DIR"
 
-# ========== PATH ensure (bash/sh) ==========
+# PATH voor huidige + toekomstige sessies
 if ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' "$HOME_DIR/.profile" 2>/dev/null; then
   echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME_DIR/.profile"
 fi
@@ -31,12 +31,10 @@ export PATH="$LOCAL_BIN:$PATH"
 
 # ========== OpenRouter API Key ==========
 if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
-  echo
-  echo -e "${CYAN}OpenRouter API key is nodig (format: sk-or-...)${RESET}"
+  printf '%sOpenRouter API key is nodig (format: sk-or-...)%s\n' "$CYAN" "$RESET"
   read -r -p "Voer je OpenRouter API key in: " OPENROUTER_API_KEY
 fi
 [[ -z "$OPENROUTER_API_KEY" || ! "$OPENROUTER_API_KEY" =~ ^sk-or- ]] && die "Ongeldige of lege API key."
-
 ok "API key ontvangen"
 
 # ========== Starship ==========
@@ -48,13 +46,13 @@ install_starship() {
   info "Starship installeren in $LOCAL_BIN…"
   curl -fsSL https://starship.rs/install.sh | sh -s -- -y --bin-dir "$LOCAL_BIN"
   ok "Starship geïnstalleerd: $("$LOCAL_BIN/starship" --version | head -n1)"
-  # Bash init
+  # Bash init toevoegen
   grep -q 'starship init bash' "$HOME_DIR/.bashrc" 2>/dev/null || \
     printf '\n# Starship prompt\neval "$(starship init bash)"\n' >> "$HOME_DIR/.bashrc"
 }
 install_starship
 
-# ========== Zellij (release binary; géén Snap) ==========
+# ========== Zellij (release-binary; géén Snap) ==========
 install_zellij() {
   if command -v zellij >/dev/null 2>&1; then
     ok "Zellij aanwezig: $(zellij --version 2>/dev/null | head -n1)"
@@ -182,14 +180,14 @@ end
 bind \r accept_line_with_ai
 bind \e\r 'commandline -f execute'
 FISH
-ok "Fish AI-hook actief"
+ok "Fish AI-hook actief (als Fish gebruikt wordt)"
 
-# Als fish bestaat, zorg dat ~/.local/bin beschikbaar is (universele var)
+# Als fish aanwezig is, zorg dat ~/.local/bin in fish PATH staat
 if command -v fish >/dev/null 2>&1; then
   fish -lc 'set -q fish_user_paths[1]; or set -Ux fish_user_paths $HOME/.local/bin $fish_user_paths' >/dev/null 2>&1 || true
 fi
 
-# ========== Zellij layout: top = shell, bottom = stderr-log ==========
+# ========== Zellij layout: boven = shell, onder = stderr-log ==========
 info "Zellij layout (verticale 2-pane) schrijven…"
 SHELL_CMD="fish"; command -v fish >/dev/null 2>&1 || SHELL_CMD="bash"
 cat > "$ZELLIJ_DIR/copilot.kdl" <<KDL
@@ -237,14 +235,12 @@ BASH
 chmod +x "$LOCAL_BIN/r"
 ok "Bash wrapper klaar: gebruik 'r <commando>'"
 
-# ========== Klaar ==========
-echo
-ok "KLAAR! Alles is in je HOME-directory geïnstalleerd."
-echo
-echo "Volgende stappen:"
-echo "  1) Herlaad je shell:  ${CYAN}exec \$SHELL -l${RESET}"
-echo "  2) Start Zellij:      ${CYAN}zellij --layout copilot${RESET}"
-echo "     - Boven: interactieve ${CYAN}${SHELL_CMD}${RESET} (AI-hook)"
-echo "     - Onder: live stderr: ${CYAN}${ERRLOG}${RESET}"
-echo "  3) In bash kun je ook: ${CYAN}r <commando>${RESET}  (AI-suggesties bij fouten)"
-echo "  4) In Fish: Enter = AI-aware; Alt+Enter = normaal uitvoeren."
+# ========== Einde ==========
+printf '\n%sKLAAR! Alles is in je HOME-directory geïnstalleerd.%s\n\n' "$GREEN" "$RESET"
+printf 'Volgende stappen:\n'
+printf '  1) Herlaad je shell:  %sexec $SHELL -l%s\n' "$CYAN" "$RESET"
+printf '  2) Start Zellij:      %szellij --layout copilot%s\n' "$CYAN" "$RESET"
+printf '     - Boven: interactieve %s%s%s (AI-hook)\n' "$CYAN" "$SHELL_CMD" "$RESET"
+printf '     - Onder: live stderr: %s%s%s\n' "$CYAN" "$ERRLOG" "$RESET"
+printf '  3) In bash kun je ook: %sr <commando>%s  (AI-suggesties bij fouten)\n' "$CYAN" "$RESET"
+printf '  4) In Fish: Enter = AI-aware; Alt+Enter = normaal uitvoeren.\n'
