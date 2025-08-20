@@ -11,7 +11,7 @@ info() { echo -e "${YELLOW}→${RESET} $*"; }
 ok()   { echo -e "${GREEN}✔${RESET} $*"; }
 err()  { echo -e "${RED}✖${RESET} $*"; }
 
-# --- API key vragen ---
+# --- API key vragen (of uit env halen) ---
 if [[ -z "${OPENROUTER_API_KEY:-}" ]]; then
   info "OpenRouter API key is nodig (format: sk-or-...)"
   read -rp "Voer je OpenRouter API key in: " OPENROUTER_API_KEY
