@@ -84,7 +84,6 @@ install_aichat() {
   if ! command -v cargo >/dev/null 2>&1; then
     info "rustup/cargo (user-space) installeren…"
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-    # shellenv
     if [ -f "$HOME_DIR/.cargo/env" ]; then
       grep -q 'source "$HOME/.cargo/env"' "$HOME_DIR/.profile" 2>/dev/null || \
         echo 'source "$HOME/.cargo/env"' >> "$HOME_DIR/.profile"
@@ -167,20 +166,22 @@ function accept_line_with_ai
         commandline -f execute
         return
     end
-    commandline -r ""
+    commandline -r ""         # input leegmaken
     : > /tmp/fish_last_stderr.log
     eval $cmd 2>>/tmp/fish_last_stderr.log
     set -l st $status
     if test $st -ne 0
         __ai_handle_failure $cmd
     end
+    # Forceer direct een nieuwe prompt, geen extra Enter meer nodig
+    commandline -f repaint
 end
 
 # Enter met AI, Alt+Enter normaal
 bind \r accept_line_with_ai
 bind \e\r 'commandline -f execute'
 FISH
-ok "Fish AI-hook actief (als Fish gebruikt wordt)"
+ok "Fish AI-hook actief (met directe prompt-refresh)"
 
 # Als fish aanwezig is, zorg dat ~/.local/bin in fish PATH staat
 if command -v fish >/dev/null 2>&1; then
