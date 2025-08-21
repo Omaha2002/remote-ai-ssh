@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "→ Cleaning up AI/Zellij environment …"
+
+# Paths we created
+HOME_DIR="$HOME"
+LOCAL_BIN="$HOME_DIR/.local/bin"
+CONFIG_DIR="$HOME_DIR/.config"
+CARGO_BIN="$HOME_DIR/.cargo/bin"
+
+# Binaries & wrappers
+rm -f "$LOCAL_BIN/r"
+rm -f "$LOCAL_BIN/zellij"
+rm -f "$LOCAL_BIN/starship"
+rm -f "$CARGO_BIN/aichat"
+
+# Config directories
+rm -rf "$CONFIG_DIR/aichat"
+rm -rf "$CONFIG_DIR/starship.toml"
+rm -rf "$CONFIG_DIR/zellij/layouts/copilot.kdl"
+rm -rf "$CONFIG_DIR/fish/config.fish"
+rm -rf "$CONFIG_DIR/fish/conf.d/ai_copilot.fish"
+
+# Logs
+rm -f /tmp/fish_last_stderr.log
+rm -f /tmp/ai_suggestions.log
+
+echo "✔ Done. Removed binaries, configs and logs installed by remote_install_user_home.sh"
+echo "Note: Rust toolchain (~/.cargo, ~/.rustup) is left intact. Remove manually if unwanted."
