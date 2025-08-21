@@ -17,13 +17,14 @@ FISH_CONFD="$FISH_DIR/conf.d"
 ZELLIJ_DIR="$CONFIG_DIR/zellij/layouts"
 AICHAT_DIR="$CONFIG_DIR/aichat"
 ERRLOG="/tmp/fish_last_stderr.log"
+AILOG="/tmp/ai_suggestions.log"
 
 mkdir -p "$LOCAL_BIN" "$FISH_CONFD" "$ZELLIJ_DIR" "$AICHAT_DIR"
 
 # Ensure PATH (current & future sessions)
 if ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' "$HOME_DIR/.profile" 2>/dev/null; then
   echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME_DIR/.profile"
-fi
+end 2>/dev/null || true
 if ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' "$HOME_DIR/.bashrc" 2>/dev/null; then
   echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME_DIR/.bashrc"
 fi
@@ -154,20 +155,27 @@ if type -q fdfind
 end
 FISH
 
-# AI-copilot: Enter = AI-aware, Alt+Enter = normal execute
+# AI-copilot: Enter = AI-aware, Alt+Enter = normal; AI output -> /tmp/ai_suggestions.log
 cat > "$FISH_CONFD/ai_copilot.fish" <<'FISH'
+set -g __ai_log "/tmp/ai_suggestions.log"
+
+function __ai_append
+    set -l msg "$argv"
+    set -l ts (date "+%Y-%m-%d %H:%M:%S")
+    echo -e "\n=== [$ts] $msg ===" >> $__ai_log
+end
+
 function __ai_handle_failure
     set -l lastcmd "$argv"
-    set -l errlog (command tail -n 120 /tmp/fish_last_stderr.log ^/dev/null)
+    set -l errlog (command tail -n 60 /tmp/fish_last_stderr.log ^/dev/null)
     if test -n "$errlog"
-        echo -e "\n❌ Command failed: $lastcmd\n→ AI suggestion:"
+        __ai_append "Command: $lastcmd"
         if type -q aichat
-            echo $errlog | aichat "The command '$lastcmd' failed. Analyze the error and provide concrete steps with commands to fix it."
+            # concise instruction: ≤3 lines, commands only
+            echo $errlog | aichat "Fix the failure of '$lastcmd'. Reply concisely (<=3 lines) with commands only." >> $__ai_log
         else
-            echo "(aichat not found) Install aichat for automatic suggestions."
+            echo "(aichat not found) Install aichat for automatic suggestions." >> $__ai_log
         end
-    else
-        echo -e "\n❌ Command failed: $lastcmd (no stderr captured)"
     end
 end
 
@@ -177,37 +185,41 @@ function accept_line_with_ai
         commandline -f execute
         return
     end
-    commandline -r ""         # clear input
+    commandline -r ""                       # clear input
     : > /tmp/fish_last_stderr.log
-    eval $cmd 2>>/tmp/fish_last_stderr.log
+    eval $cmd 2>>/tmp/fish_last_stderr.log  # run & capture stderr
     set -l st $status
     if test $st -ne 0
         __ai_handle_failure $cmd
     end
-    # Ensure prompt immediately repaints (no extra Enter needed)
-    commandline -f repaint
+    commandline -f repaint                  # show prompt immediately
 end
 
 # Enter with AI; Alt+Enter without AI
 bind \r accept_line_with_ai
 bind \e\r 'commandline -f execute'
 FISH
-ok "Fish AI hook active (with prompt repaint)"
+ok "Fish AI hook active (prompt repaint, AI -> $AILOG)"
 
 # Ensure Fish sees ~/.local/bin (universal var)
 if command -v fish >/dev/null 2>&1; then
   fish -lc 'set -q fish_user_paths[1]; or set -Ux fish_user_paths $HOME/.local/bin $fish_user_paths' >/dev/null 2>&1 || true
 fi
 
-# ========== Zellij layout: top = shell, bottom = stderr log ==========
-info "Writing Zellij layout (vertical 2-pane)…"
+# ========== Zellij layout: left/top shell, left/bottom stderr, right AI log ==========
+info "Writing Zellij layout (3 panes)…"
 SHELL_CMD="fish"; command -v fish >/dev/null 2>&1 || SHELL_CMD="bash"
 cat > "$ZELLIJ_DIR/copilot.kdl" <<KDL
 layout {
-  pane split_direction="vertical" {
-    pane command="${SHELL_CMD}"
+  pane split_direction="horizontal" {
+    pane split_direction="vertical" {
+      pane command="${SHELL_CMD}"
+      pane command="bash" {
+        args "-lc" "touch ${ERRLOG}; tail -f ${ERRLOG}"
+      }
+    }
     pane command="bash" {
-      args "-lc" "touch ${ERRLOG}; tail -f ${ERRLOG}"
+      args "-lc" "touch ${AILOG}; tail -f ${AILOG}"
     }
   }
 }
@@ -227,33 +239,39 @@ clients:
 YAML
 ok "aichat config: $AICHAT_DIR/config.yaml"
 
-# ========== Bash wrapper 'r' ==========
+# ========== Bash wrapper 'r' (AI -> /tmp/ai_suggestions.log) ==========
 info "Adding Bash AI wrapper 'r'…"
 cat > "$LOCAL_BIN/r" <<'BASH'
 #!/usr/bin/env bash
 LOG="/tmp/fish_last_stderr.log"
+AILOG="/tmp/ai_suggestions.log"
 : > "$LOG"
 "$@" 2>>"$LOG"
 status=$?
 if [ $status -ne 0 ]; then
-  if command -v aichat >/dev/null 2>&1; then
-    echo "❌ Command failed: $*"
-    tail -n 120 "$LOG" | aichat "The command '$*' failed (exit $status). Analyze the error and give concrete steps with commands to fix it."
-  else
-    echo "❌ Command failed (exit $status). Install 'aichat' for automatic help."
-  fi
+  ts="$(date '+%Y-%m-%d %H:%M:%S')"
+  {
+    echo
+    echo "=== [$ts] Command: $* ==="
+    if command -v aichat >/dev/null 2>&1; then
+      tail -n 60 "$LOG" | aichat "Fix the failure of '$*'. Reply concisely (<=3 lines) with commands only."
+    else
+      echo "(aichat not found) Install aichat for automatic suggestions."
+    fi
+  } >> "$AILOG"
 fi
 exit $status
 BASH
 chmod +x "$LOCAL_BIN/r"
-ok "Bash wrapper ready: use 'r <command>'"
+ok "Bash wrapper ready: use 'r <command>' (AI -> $AILOG)"
 
 # ========== Done ==========
 printf '\n%sDONE! Everything installed in your HOME directory.%s\n\n' "$GREEN" "$RESET"
 printf 'Next steps:\n'
 printf '  1) Reload your shell:  %sexec $SHELL -l%s\n' "$CYAN" "$RESET"
 printf '  2) Start Zellij:       %szellij --layout copilot%s\n' "$CYAN" "$RESET"
-printf '     - Top: interactive %s%s%s (AI hook)\n' "$CYAN" "$SHELL_CMD" "$RESET"
-printf '     - Bottom: live stderr: %s%s%s\n' "$CYAN" "$ERRLOG" "$RESET"
+printf '     - Left/Top: interactive %s%s%s (AI hook)\n' "$CYAN" "$SHELL_CMD" "$RESET"
+printf '     - Left/Bottom: live stderr: %s%s%s\n' "$CYAN" "$ERRLOG" "$RESET"
+printf '     - Right: AI suggestions:   %s%s%s\n' "$CYAN" "$AILOG" "$RESET"
 printf '  3) In bash you can also: %sr <command>%s  (AI suggestions on failure)\n' "$CYAN" "$RESET"
 printf '  4) In Fish: Enter = AI-aware; Alt+Enter = normal execute.\n'
