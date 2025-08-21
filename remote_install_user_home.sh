@@ -24,7 +24,7 @@ mkdir -p "$LOCAL_BIN" "$FISH_CONFD" "$ZELLIJ_DIR" "$AICHAT_DIR"
 # Ensure PATH (current & future sessions)
 if ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' "$HOME_DIR/.profile" 2>/dev/null; then
   echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME_DIR/.profile"
-end 2>/dev/null || true
+fi
 if ! grep -q 'export PATH="$HOME/.local/bin:$PATH"' "$HOME_DIR/.bashrc" 2>/dev/null; then
   echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME_DIR/.bashrc"
 fi
