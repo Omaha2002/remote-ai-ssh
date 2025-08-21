@@ -208,7 +208,7 @@ info "aichat configureren…"
 cat > "$AICHAT_DIR/config.yaml" <<YAML
 model: openrouter:openrouter/auto
 clients:
-  - type: openai-compatible
+  - type: openrouter:qwen/qwen3-coder
     name: openrouter
     api_base: https://openrouter.ai/api/v1
     api_key: ${OPENROUTER_API_KEY}
